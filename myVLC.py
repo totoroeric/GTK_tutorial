@@ -100,3 +100,20 @@ UI_INFO = """
   </toolbar>
 </ui>
 """
+
+class myVLCWindow(Gtk.Window):
+    def __init__(self):
+        Gtk.Window.__init__(self, title="My VLC")
+
+        self.set_default_size(600, 400)
+
+        action_group = Gtk.AccelGroup(name="my_actions")
+
+        self.add_MediaMenu_actions(action_group)
+        self.add_MediaMenu_actions(action_group)
+        self.add_MediaMenu_actions(action_group)
+        self.add_MediaMenu_actions(action_group)
+        self.add_MediaMenu_actions(action_group)
+        self.add_MediaMenu_actions(action_group)
+        self.add_MediaMenu_actions(action_group)
+        self.add_MediaMenu_actions(action_group)
