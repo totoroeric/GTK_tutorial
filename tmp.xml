@@ -1,0 +1,39 @@
+
+    <menu action='VideoMenu'>
+    </menu>
+    <menu action='SubtitleMenu'>
+      <menuitem action='AddSubtitleFile' />
+      <menuitem action='SubTrackNext' />
+    </menu>
+    <menu action='ToolsMenu'>
+    </menu>
+    <menu action='ViewMenu'>
+    </menu>
+    <menu action='HelpMenu'>
+    </menu>
+
+    <menu action='PlaybackMenu'>
+
+    </menu>
+
+
+      <menuitem action='SpeedUp' />
+      <menuitem action='SpeedDown' />
+      <menuitem action='ResetSpeed' />
+      <separator />
+      <menuitem action='JumpForward' />
+      <menuitem action='JumpBackward' />
+      <menuitem action='JumpToSpecificTime' />
+      <separator />
+      <menuitem action='Play' />
+      <menuitem action='Stop' />
+
+        <menu action='AudioMenu'>
+      <menuitem action='AudioTrackNext' />
+      <separator />
+      <menuitem action='IncreaseVolume' />
+      <menuitem action='DecreaseVolume' />
+      <menuitem action='Mute' />
+    </menu>
+
+

@@ -1,6 +1,11 @@
 import gi
+import sys, os
+gi.require_version('Gst', '1.0')
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk
+from gi.repository import Gtk, Gdk, GObject
+
+# Needed for window.get_xid(), xvimagesink.set_window_handle(), respectively:
+from gi.repository import GdkX11, GstVideo
 
 UI_INFO = """
 <ui>
@@ -11,23 +16,24 @@ UI_INFO = """
       <menuitem action='Quit' />
     </menu>
     <menu action='PlaybackMenu'>
-      <menutiem action='SpeedUp' />
-      <menuitem action='SpeedDown' />
-      <menuitem action='ResetSpeed' />
-      <separator />
-      <menuitem action='JumpForward' />
-      <menuitem action='JumpBackward' />
-      <menuitem action='JumpToSpecificTime' />
-      <separator />
-      <menuitem action='Play' />
-      <menuitem action='Stop' />
+        <menuitem action='SpeedUp' />
+        <menuitem action='SpeedUp' />
+        <menuitem action='SpeedDown' />
+        <menuitem action='ResetSpeed' />
+        <separator />
+        <menuitem action='JumpForward' />
+        <menuitem action='JumpBackward' />
+        <menuitem action='JumpToSpecificTime' />
+        <separator />
+        <menuitem action='Play' />
+        <menuitem action='Stop' />
     </menu>
     <menu action='AudioMenu'>
-      <menuitem action='AudioTrackNext' />
-      <separator />
-      <menuitem action='IncreaseVolume' />
-      <menuitem action='DecreaseVolume' />
-      <menuitem action='Mute' />
+        <menuitem action='AudioTrackNext' />
+        <separator />
+        <menuitem action='IncreaseVolume' />
+        <menuitem action='DecreaseVolume' />
+        <menuitem action='Mute' />
     </menu>
     <menu action='VideoMenu'>
     </menu>
@@ -41,19 +47,12 @@ UI_INFO = """
     </menu>
     <menu action='HelpMenu'>
     </menu>
+
   </menubar>
   <toolbar name='ToolBar'>
-    <toolitem action='PlayButton' />
-    <toolitem action='PreviousMediaButton' />
-    <toolitem action='StopButton' />
-    <toolitem action='NextMediaButton' />
-    <toolitem action='FullScreenToggle' />
-    <toolitem action='ExtendedSettingsToggle' />
-    <toolitem action='PlaylistToggle' />
-    <toolitem action='LoopModeToggle' />
-    <toolitem action='RandomToggle' />
-    <toolitem action='MuteButton' />
-    <toolitem action='VolumeController' />
+    <toolitem action='Play' />
+    <toolitem action='Stop' />
+    <toolitem action='Mute' />
   </toolbar>
   <popup name='PopupMenu'>
     <menuitem action='EditCopy' />
@@ -68,6 +67,7 @@ class myVLCWindow(Gtk.Window):
         Gtk.Window.__init__(self, title="My VLC")
 
         self.set_default_size(600, 400)
+        self.connect("destroy", Gtk.main_quit, "WM destroy")
 
         action_group = Gtk.ActionGroup(name="my_actions")
 
@@ -94,8 +94,17 @@ class myVLCWindow(Gtk.Window):
         #这里插入进度条
         box.pack_start(toolbar, False, False, 0)
 
-        label = Gtk.Label(label="Right-click to see the popup menu.")
-        eventbox.add(label)
+        # label = Gtk.Label(label="Right-click to see the popup menu.")
+        self.movie_window = Gtk.DrawingArea() # 视频窗口
+        eventbox.add(self.movie_window)
+
+        # 以下定义播放器
+        self.player = Gst.ElementFactory.make("playbin", "play")
+        bus = self.player.get_bus()
+        bus.add_signal_watch()
+        bus.enable_sync_message_emission()
+        bus.connect("message", self.on_message)
+        bus.connect("sync-message::element", self.on_sync_message)
 
         self.popup = uimanager.get_widget("/PopupMenu")
 
@@ -113,7 +122,7 @@ class myVLCWindow(Gtk.Window):
     def add_PlaybackMenu_actions(self, action_group):
         action_group.add_actions(
             [
-                ("PlaybackMenu", None, "Playback", "<alt>L", None, None),
+                ('PlaybackMenu', None, "Playback", "<alt>L", None, None),
                 ('SpeedUp', None, "Speed Up", "<alt>U", None, None),
                 ('SpeedDown', None, "Speed Down", "<alt>D", None, None),
                 ('ResetSpeed', None, "Reset Speed", "<alt>R", None, None),
@@ -128,7 +137,7 @@ class myVLCWindow(Gtk.Window):
     def add_Audio_actions(self, action_group):
         action_group.add_actions(
             [
-                ("AudioNenu", None, "Audio", "<alt>A", None, None),
+                ("AudioMenu", None, "Audio", "<alt>A", None, None),
                 ("AudioTrackNext", None, "Audio Track", "<alt>T", None, None),
                 ("IncreaseVolume", None, "Increase Volume", "<alt>I", None, None),
                 ("DecreaseVolume", None, "Decrease Volume", "<alt>E", None, None),
@@ -139,7 +148,7 @@ class myVLCWindow(Gtk.Window):
     def add_Video_actions(self, action_group):
         action_group.add_actions(
             [
-                ("VideoNenu", None, "Video", "<alt>V", None, None)
+                ("VideoMenu", None, "Video", "<alt>V", None, None)
             ]
         )
 
@@ -161,13 +170,13 @@ class myVLCWindow(Gtk.Window):
     def add_View_actions(self, action_group):
         action_group.add_actions(
             [
-                ("ViewMenu", None, "Video", None, None, None)
+                ("ViewMenu", None, "View", None, None, None)
             ]
         )
     def add_Help_actions(self, action_group):
         action_group.add_actions(
             [
-                ("HelpNenu", None, "Help", None, None, None)
+                ("HelpMenu", None, "Help", None, None, None)
             ]
         )
 
@@ -187,6 +196,9 @@ class myVLCWindow(Gtk.Window):
 
     def on_quit(self, widget):
         Gtk.main_quit()
+
+    def on_button_press_event(self, widget, event):
+        pass
 
 window = myVLCWindow()
 window.connect("destroy", Gtk.main_quit)
