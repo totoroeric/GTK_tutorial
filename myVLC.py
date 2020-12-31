@@ -88,17 +88,17 @@ class myVLCWindow(Gtk.Window):
 
         menubar = uimanager.get_widget("/MenuBar")
         toolbar = uimanager.get_widget("/ToolBar")
-        # eventbox = Gtk.EventBox()
+        eventbox = Gtk.EventBox()
         # vbox = Gtk.VBox()
-        # eventbox.connect("button-press-event", self.on_button_press_event)
+        eventbox.connect("button-press-event", self.on_button_press_event)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.pack_start(menubar, False, False, 0)
-        # box.pack_start(eventbox, True, True, 0)  #这里需要插入视频窗口,这里用一个eventbox替代先
+        box.pack_start(eventbox, True, True, 0)  #这里需要插入视频窗口,这里用一个eventbox替代先
         #这里插入进度条
         # box.pack_start(vbox, False, False, 0)
         self.movie_window = Gtk.DrawingArea() # 视频窗口
-        box.add(self.movie_window)
+        eventbox.add(self.movie_window)
         box.pack_start(toolbar, False, False, 0)
 
         # label = Gtk.Label(label="Right-click to see the popup menu.")
