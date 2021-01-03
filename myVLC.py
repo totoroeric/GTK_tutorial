@@ -1,7 +1,8 @@
 import gi
-import sys, os
+import sys, os, _thread, time
 gi.require_version('Gst', '1.0')
 gi.require_version("Gtk", "3.0")
+gi.require_version('GstVideo', '1.0')
 from gi.repository import Gtk, Gdk, GObject, Gst
 
 # Needed for window.get_xid(), xvimagesink.set_window_handle(), respectively:
@@ -16,7 +17,6 @@ UI_INFO = """
       <menuitem action='Quit' />
     </menu>
     <menu action='PlaybackMenu'>
-        <menuitem action='SpeedUp' />
         <menuitem action='SpeedUp' />
         <menuitem action='SpeedDown' />
         <menuitem action='ResetSpeed' />
@@ -52,7 +52,12 @@ UI_INFO = """
   <toolbar name='ToolBar'>
     <toolitem action='Play' />
     <toolitem action='Stop' />
-    <toolitem action='Mute' />
+    <toolitem action='JumpBackward' />
+    <toolitem action='JumpForward' />
+  </toolbar>
+  <toolbar name='SpeedToolBar'>
+    <toolitem action='SpeedUp' />
+    <toolitem action='SpeedDown' />
   </toolbar>
   <popup name='PopupMenu'>
     <menuitem action='EditCopy' />
@@ -62,14 +67,16 @@ UI_INFO = """
 </ui>
 """
 
-class myVLCWindow(Gtk.Window):
+# Oh, got it to work. Had to add a ToolItem into the tooblar, 
+# then call toolitem.add(spinbutton).
+class myVLCWindow(Gtk.ApplicationWindow):
     def __init__(self):
         Gtk.Window.__init__(self, title="My VLC")
 
         self.file_name = ""
         self.play_toggle = "play"
 
-        self.set_default_size(600, 400)
+        self.set_default_size(800, 400)
         self.connect("destroy", Gtk.main_quit, "WM destroy")
 
         action_group = Gtk.ActionGroup(name="my_actions")
@@ -88,18 +95,66 @@ class myVLCWindow(Gtk.Window):
 
         menubar = uimanager.get_widget("/MenuBar")
         toolbar = uimanager.get_widget("/ToolBar")
+        speedtoolbar = uimanager.get_widget("/SpeedToolBar")
+
+        # timeline的容器grid
+        timelinegrid = Gtk.Grid() #时间和进度条放这里
+        # 定义左右两个time lable
+        self.time_label_left = Gtk.Label(label="00:00")
+        self.time_label_right = Gtk.Label(label="00:00")
+        # 定义scale
+        ad = Gtk.Adjustment(0, 0, 100, 1, 10, 0)
+        self.scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=ad)
+        self.scale.set_digits(0)
+        self.scale.set_hexpand(True)
+        self.scale.set_valign(Gtk.Align.START)
+        self.scale.connect("value-changed", self.scale_moved)
+        # 组装timelinegrid
+        timelinegrid.set_column_homogeneous(True)
+        timelinegrid.set_column_spacing(10)
+        timelinegrid.attach(self.time_label_left, 0, 0, 1, 1)
+        timelinegrid.attach_next_to(self.scale, self.time_label_left, Gtk.PositionType.RIGHT, 8, 1)
+        timelinegrid.attach_next_to(self.time_label_right, self.scale, Gtk.PositionType.RIGHT, 1, 1)
+
+        # 视频窗口的容器box
         eventbox = Gtk.EventBox()
         # vbox = Gtk.VBox()
         eventbox.connect("button-press-event", self.on_button_press_event)
 
+        # 外围的总box
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.pack_start(menubar, False, False, 0)
-        box.pack_start(eventbox, True, True, 0)  #这里需要插入视频窗口,这里用一个eventbox替代先
-        #这里插入进度条
-        # box.pack_start(vbox, False, False, 0)
+        box.pack_start(eventbox, True, True, 0)
+        # 定义播放视频的窗口区域
         self.movie_window = Gtk.DrawingArea() # 视频窗口
         eventbox.add(self.movie_window)
-        box.pack_start(toolbar, False, False, 0)
+        box.pack_start(timelinegrid, False, False, 0)
+
+        # 把toolbar和其他一些button放在一行的box
+        hbox = Gtk.HBox()
+
+        # 定义跳转脚步大小的spinbutton
+        forwardstep_adjustment = Gtk.Adjustment(value=5, lower=1, upper=15, step_increment=1, page_increment=5)
+        self.forwardstep = Gtk.SpinButton()
+        forwardstep_label = Gtk.Label(label="Step Size(Seconds)")
+        self.forwardstep.set_adjustment(forwardstep_adjustment)
+        self.forwardstep.connect("value-changed", self.on_forwardstep_changed)
+
+        # 定义播放速度的spinbutton
+        speed_adjustment = Gtk.Adjustment(value=100, lower=10, upper=200, step_increment=10, page_increment=50)
+        self.speed = Gtk.SpinButton()
+        speed_label = Gtk.Label(label="Play Speed(%)")
+        self.speed.set_adjustment(speed_adjustment)
+        self.speed.connect("value-changed", self.on_speed_changed)
+
+        hbox.pack_start(toolbar, False, False, 0)
+        hbox.pack_start(forwardstep_label, False, False, 0)
+        hbox.pack_start(self.forwardstep, False, False, 0)
+        hbox.pack_start(speedtoolbar, False, False, 0)
+        hbox.pack_start(speed_label, False, False, 0)
+        hbox.pack_start(self.speed, False, False, 0)
+
+        box.pack_start(hbox, False, False, 0)
 
         # label = Gtk.Label(label="Right-click to see the popup menu.")
         # eventbox.add(self.movie_window)
@@ -131,14 +186,14 @@ class myVLCWindow(Gtk.Window):
         action_group.add_actions(
             [
                 ('PlaybackMenu', None, "Playback", "<alt>L", None, None),
-                ('SpeedUp', None, "Speed Up", "<alt>U", None, None),
-                ('SpeedDown', None, "Speed Down", "<alt>D", None, None),
+                ('SpeedUp', Gtk.STOCK_GO_UP, "Speed Up", "<alt>U", None, None),
+                ('SpeedDown', Gtk.STOCK_GO_DOWN, "Speed Down", "<alt>D", None, None),
                 ('ResetSpeed', None, "Reset Speed", "<alt>R", None, None),
-                ('JumpForward', None, "Jump Forward", "<alt>J", None, None),
-                ('JumpBackward', None, "Jump Backward", "<alt>K", None, None),
+                ('JumpForward', Gtk.STOCK_MEDIA_FORWARD, "Jump Forward", "<alt>J", None, None),
+                ('JumpBackward', Gtk.STOCK_MEDIA_REWIND, "Jump Backward", "<alt>K", None, None),
                 ('JumpToSpecificTime', None, "Jump To Specific Time", "<control>T", None, None),
-                ('Play', None, "Play", "<alt>P", None, self.on_play_pause),
-                ('Stop', None, "Stop", "<alt>S", None, self.on_stop)
+                ('Play', Gtk.STOCK_MEDIA_PLAY, "Play", "<alt>P", None, self.on_play_pause),
+                ('Stop', Gtk.STOCK_MEDIA_STOP, "Stop", "<alt>S", None, self.on_stop)
             ]
         )
 
@@ -277,6 +332,23 @@ class myVLCWindow(Gtk.Window):
             imagesink.set_property("force-aspect-ratio", True)
             imagesink.set_window_handle(self.movie_window.get_property('window').get_xid())
 
+    def scale_moved(self, event):
+        print("Horizontal scale is " + str(int(self.scale.get_value())))
+
+    def on_jump_forward(self, widget):
+        pass
+
+
+    def on_jump_backword(self, widget):
+        pass
+
+    def on_forwardstep_changed(self, widget):
+        pass
+
+    def on_speed_changed(self, widget):
+        pass
+
+Gdk.threads_init()
 window = myVLCWindow()
 window.connect("destroy", Gtk.main_quit)
 window.show_all()

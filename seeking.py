@@ -78,9 +78,9 @@ class GTK_Main:
 
     def play_thread(self):
         play_thread_id = self.play_thread_id
-        Gdk._threads_enter()
+        Gdk.threads_enter()
         self.time_label.set_text("00:00 / 00:00")
-        Gdk._threads_leave()
+        Gdk.threads_leave()
 
         while play_thread_id == self.play_thread_id:
             try:
@@ -89,9 +89,9 @@ class GTK_Main:
                 if dur_int == -1:
                     continue
                 dur_str = self.convert_ns(dur_int)
-                Gdk._threads_enter()
+                Gdk.threads_enter()
                 self.time_label.set_text("00:00 / " + dur_str)
-                Gdk._threads_leave()
+                Gdk.threads_leave()
                 break
             except:
                 pass
@@ -101,9 +101,9 @@ class GTK_Main:
             pos_int = self.player.query_position(Gst.Format.TIME, None)[0]
             pos_str = self.convert_ns(pos_int)
             if play_thread_id == self.play_thread_id:
-                Gdk._threads_enter()
+                Gdk.threads_enter()
                 self.time_label.set_text(pos_str + " / " + dur_str)
-                Gdk._threads_leave()
+                Gdk.threads_leave()
             time.sleep(1)
 
     def on_message(self, bus, message):
@@ -151,7 +151,8 @@ class GTK_Main:
             h,m = divmod(m, 60)
             return "%i:%02i:%02i" %(h,m,s)
 
-GObject.threads_init()
+# GObject.threads_init()
+Gdk.threads_init()
 Gst.init(None)        
 GTK_Main()
 Gtk.main()
