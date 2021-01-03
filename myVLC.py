@@ -75,6 +75,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         self.file_name = ""
         self.play_toggle = "play"
+        self.stepsize = 5 # 前后跳转步长（秒）
 
         self.set_default_size(800, 400)
         self.connect("destroy", Gtk.main_quit, "WM destroy")
@@ -134,7 +135,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         hbox = Gtk.HBox()
 
         # 定义跳转脚步大小的spinbutton
-        forwardstep_adjustment = Gtk.Adjustment(value=5, lower=1, upper=15, step_increment=1, page_increment=5)
+        forwardstep_adjustment = Gtk.Adjustment(value=self.stepsize, lower=1, upper=15, step_increment=1, page_increment=5)
         self.forwardstep = Gtk.SpinButton()
         forwardstep_label = Gtk.Label(label="Step Size(Seconds)")
         self.forwardstep.set_adjustment(forwardstep_adjustment)
@@ -189,8 +190,8 @@ class myVLCWindow(Gtk.ApplicationWindow):
                 ('SpeedUp', Gtk.STOCK_GO_UP, "Speed Up", "<alt>U", None, None),
                 ('SpeedDown', Gtk.STOCK_GO_DOWN, "Speed Down", "<alt>D", None, None),
                 ('ResetSpeed', None, "Reset Speed", "<alt>R", None, None),
-                ('JumpForward', Gtk.STOCK_MEDIA_FORWARD, "Jump Forward", "<alt>J", None, None),
-                ('JumpBackward', Gtk.STOCK_MEDIA_REWIND, "Jump Backward", "<alt>K", None, None),
+                ('JumpForward', Gtk.STOCK_MEDIA_FORWARD, "Jump Forward", "<alt>J", None, self.on_jump_forward),
+                ('JumpBackward', Gtk.STOCK_MEDIA_REWIND, "Jump Backward", "<alt>K", None, self.on_jump_backword),
                 ('JumpToSpecificTime', None, "Jump To Specific Time", "<control>T", None, None),
                 ('Play', Gtk.STOCK_MEDIA_PLAY, "Play", "<alt>P", None, self.on_play_pause),
                 ('Stop', Gtk.STOCK_MEDIA_STOP, "Stop", "<alt>S", None, self.on_stop)
@@ -336,14 +337,24 @@ class myVLCWindow(Gtk.ApplicationWindow):
         print("Horizontal scale is " + str(int(self.scale.get_value())))
 
     def on_jump_forward(self, widget):
-        pass
+        rc, pos_int = self.player.query_position(Gst.Format.TIME)
+        seek_ns = pos_int + self.stepsize * 1000000000
+        print('Forward: %d ns -> %d ns' % (pos_int, seek_ns))
+        self.player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, seek_ns)
 
 
     def on_jump_backword(self, widget):
-        pass
+        rc, pos_int = self.player.query_position(Gst.Format.TIME)
+        seek_ns = pos_int - self.stepsize * 1000000000
+        if seek_ns < 0:
+            seek_ns = 0
+        print('Backward: %d ns -> %d ns' % (pos_int, seek_ns))
+        self.player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, seek_ns)
 
     def on_forwardstep_changed(self, widget):
-        pass
+        stepsize = self.forwardstep.get_value_as_int()
+        print(stepsize)
+        self.stepsize = stepsize
 
     def on_speed_changed(self, widget):
         pass
