@@ -55,10 +55,6 @@ UI_INFO = """
     <toolitem action='JumpBackward' />
     <toolitem action='JumpForward' />
   </toolbar>
-  <toolbar name='SpeedToolBar'>
-    <toolitem action='SpeedUp' />
-    <toolitem action='SpeedDown' />
-  </toolbar>
   <popup name='PopupMenu'>
     <menuitem action='EditCopy' />
     <menuitem action='EditPaste' />
@@ -76,6 +72,8 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.file_name = ""
         self.play_toggle = "play"
         self.stepsize = 5 # 前后跳转步长（秒）
+        self.playspeed = 100 
+        self.sub_uri = ""
 
         self.set_default_size(800, 400)
         self.connect("destroy", Gtk.main_quit, "WM destroy")
@@ -96,7 +94,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         menubar = uimanager.get_widget("/MenuBar")
         toolbar = uimanager.get_widget("/ToolBar")
-        speedtoolbar = uimanager.get_widget("/SpeedToolBar")
+        # speedtoolbar = uimanager.get_widget("/SpeedToolBar")
 
         # timeline的容器grid
         timelinegrid = Gtk.Grid() #时间和进度条放这里
@@ -132,7 +130,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         box.pack_start(timelinegrid, False, False, 0)
 
         # 把toolbar和其他一些button放在一行的box
-        hbox = Gtk.HBox()
+        hbox = Gtk.HBox(spacing=6)
 
         # 定义跳转脚步大小的spinbutton
         forwardstep_adjustment = Gtk.Adjustment(value=self.stepsize, lower=1, upper=15, step_increment=1, page_increment=5)
@@ -141,18 +139,23 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.forwardstep.set_adjustment(forwardstep_adjustment)
         self.forwardstep.connect("value-changed", self.on_forwardstep_changed)
 
+        # 定义变速、常速切换开关
+        self.switch_speed_button = Gtk.ToggleButton(label="PlaySpeed %")
+        self.switch_speed_button.connect("toggled", self.on_speed_toggled, "1")
+
         # 定义播放速度的spinbutton
-        speed_adjustment = Gtk.Adjustment(value=100, lower=10, upper=200, step_increment=10, page_increment=50)
+        speed_adjustment = Gtk.Adjustment(value=self.playspeed, lower=10, upper=200, step_increment=10, page_increment=50)
         self.speed = Gtk.SpinButton()
-        speed_label = Gtk.Label(label="Play Speed(%)")
+        # speed_label = Gtk.Label(label="Play Speed(%)")
         self.speed.set_adjustment(speed_adjustment)
         self.speed.connect("value-changed", self.on_speed_changed)
 
         hbox.pack_start(toolbar, False, False, 0)
         hbox.pack_start(forwardstep_label, False, False, 0)
         hbox.pack_start(self.forwardstep, False, False, 0)
-        hbox.pack_start(speedtoolbar, False, False, 0)
-        hbox.pack_start(speed_label, False, False, 0)
+        hbox.pack_start(self.switch_speed_button, False, False, 0)
+        # hbox.pack_start(speedtoolbar, False, False, 0)
+        # hbox.pack_start(speed_label, False, False, 0)
         hbox.pack_start(self.speed, False, False, 0)
 
         box.pack_start(hbox, False, False, 0)
@@ -187,7 +190,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         action_group.add_actions(
             [
                 ('PlaybackMenu', None, "Playback", "<alt>L", None, None),
-                ('SpeedUp', Gtk.STOCK_GO_UP, "Speed Up", "<alt>U", None, None),
+                ('SpeedUp', Gtk.STOCK_GOTO_BOTTOM, "Speed Up", "<alt>U", None, None),
                 ('SpeedDown', Gtk.STOCK_GO_DOWN, "Speed Down", "<alt>D", None, None),
                 ('ResetSpeed', None, "Reset Speed", "<alt>R", None, None),
                 ('JumpForward', Gtk.STOCK_MEDIA_FORWARD, "Jump Forward", "<alt>J", None, self.on_jump_forward),
@@ -221,7 +224,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         action_group.add_actions(
             [
                 ("SubtitleMenu", None, "Subtitle", "<alt>T", None, None),
-                ("AddSubtitleFile", None, "Add Subtitle File...", "<alt>S", None, None),
+                ("AddSubtitleFile", None, "Add Subtitle File...", "<alt>S", None, self.on_pick_sub_file),
                 ("SubTrackNext", None, "Sub Track Next", "<alt>R", None, None)
             ]
         )
@@ -279,6 +282,8 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         dialog.destroy()
 
+
+
     def add_filters(self, dialog):
         filter_text = Gtk.FileFilter()
         filter_text.set_name("Text files")
@@ -303,9 +308,20 @@ class myVLCWindow(Gtk.ApplicationWindow):
                 self.play_toggle = "pause"
                 self.player.set_property("uri", "file://" + filepath)
                 self.player.set_state(Gst.State.PLAYING)
-            else:
-                self.player.set_state(Gst.State.NULL)
-                self.play_toggle = "play"
+                widget.set_stock_id(Gtk.STOCK_MEDIA_PAUSE)
+                # 打印一些媒体信息，用于调试
+                print(str(self.player.get_property("n-text"))+"inner subtitles")
+                print(self.player.get_property("current-suburi"))
+                self.player.set_property("flags", 0x00000613)
+        elif self.play_toggle == "playing":
+            self.player.set_state(Gst.State.PLAYING)
+            self.play_toggle = "pause"
+            widget.set_stock_id(Gtk.STOCK_MEDIA_PAUSE)
+        else:
+            self.player.set_state(Gst.State.PAUSED)
+            self.play_toggle = "playing"
+            widget.set_stock_id(Gtk.STOCK_MEDIA_PLAY)
+        # print(widget.get_name())
 
     def on_stop(self, widget):
         pass
@@ -352,12 +368,49 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, seek_ns)
 
     def on_forwardstep_changed(self, widget):
-        stepsize = self.forwardstep.get_value_as_int()
+        stepsize = widget.get_value_as_int()
         print(stepsize)
         self.stepsize = stepsize
 
     def on_speed_changed(self, widget):
-        pass
+        playspeed = widget.get_value_as_int()
+        print(playspeed)
+        self.playspeed = playspeed
+
+    def on_speed_toggled(self, widget, name):
+        if widget.get_active():
+            state = "on"
+            self.player.seek(self.playspeed / 100, Gst.Format.TIME, Gst.SeekFlags.FLUSH, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+        else:
+            state = "off"
+            self.player.seek(1.0, Gst.Format.TIME, Gst.SeekFlags.SKIP, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+        print("Button", name, "was turned", state)
+
+    def on_pick_sub_file(self, widget):
+        dialog = Gtk.FileChooserDialog(
+            title="Please choose a file", parent=self, action=Gtk.FileChooserAction.OPEN
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN,
+            Gtk.ResponseType.OK,
+        )
+
+        self.add_filters(dialog)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            print("Open clicked")
+            file_name = dialog.get_filename()
+            print("File selected: " + file_name)
+            self.sub_uri = file_name
+        elif response == Gtk.ResponseType.CANCEL:
+            print("Cancel clicked")
+
+        dialog.destroy()
+        print(self.sub_uri)
+        self.player.set_property("current-suburi", self.sub_uri)
 
 Gdk.threads_init()
 window = myVLCWindow()
