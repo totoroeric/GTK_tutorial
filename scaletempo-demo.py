@@ -107,7 +107,7 @@ class GTK_Main(object):
     def on_speed_toggled(self, widget, name):
         if widget.get_active():
             state = "on"
-            self.player.seek(0.5 , Gst.Format.TIME, Gst.SeekFlags.FLUSH, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+            self.player.seek(0.65 , Gst.Format.TIME, Gst.SeekFlags.FLUSH, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
 
         else:
             state = "off"
@@ -125,12 +125,22 @@ class GTK_Main(object):
             self.button.set_label("Start")
 
     def demuxer_callback(self, demuxer, pad):
-        if pad.get_property("template").name_template == "video_%02d":
-            qv_pad = self.queuev.get_pad("sink")
-            pad.link(qv_pad)
-        elif pad.get_property("template").name_template == "audio_%02d":
-            qa_pad = self.queuea.get_pad("sink")
-            pad.link(qa_pad)
+        # if pad.get_property("template").name_template == "video_%02d":
+        #     qv_pad = self.queuev.get_pad("sink")
+        #     pad.link(qv_pad)
+        # elif pad.get_property("template").name_template == "audio_%02d":
+        #     qa_pad = self.queuea.get_pad("sink")
+        #     pad.link(qa_pad)
+
+        string = pad.query_caps(None).to_string()
+        print('Found stream: %s' % string)
+        if string.startswith('video/x-raw'):
+            # qv_pad = self.queuev.get_pad("sink")
+            pad.link(self.queuev.get_static_pad('sink'))
+        elif string.startswith('audio/x-raw'):
+            # qv_pad = self.queuev.get_pad("sink")
+            pad.link(self.queuea.get_static_pad('sink'))
+
 
 
 Gst.init(None)
