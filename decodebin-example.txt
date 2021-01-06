@@ -1,0 +1,23 @@
+/home/eric/Downloads/S01E22.mkv
+
+gst-launch-1.0 -v filesrc location="/home/eric/Downloads/S01E22.mkv" ! matroskademux ! vorbisdec ! audioconvert ! audioresample ! autoaudiosink
+
+
+gst-launch-1.0 -v filesrc location=/home/eric/Downloads/S01E22.mkv ! decodebin name=d \
+    d. ! queue ! audioconvert ! audioresample ! scaletempo ! audioconvert ! audioresample ! autoaudiosink \
+    d. ! queue ! videoconvert ! autovideosink
+
+
+
+The decodebin element uses dynamic pads. You have to select pads using 'pad-added' signal.
+
+Example
+
+def decodebin_pad_added(self, element, pad):
+    string = pad.query_caps(None).to_string()
+    print('Found stream: %s' % string)
+    if string.startswith('video/x-raw'):
+        pad.link(encoder.get_static_pad('sink'))
+
+
+decoder.connect("pad-added", decodebin_pad_added)

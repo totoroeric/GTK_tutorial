@@ -167,6 +167,11 @@ class myVLCWindow(Gtk.ApplicationWindow):
         # 以下定义播放器
         Gst.init(None)  
         self.player = Gst.ElementFactory.make("playbin", "player")
+        print("original audio sink:" + str(self.player.get_property("audio-sink")))
+        # 自定义audio sink，使用scaletempo使变速时声音不变调
+        self.my_audio_sink = Gst.ElementFactory.make("scaletempo ! audioconvert ! audioresample ! autoaudiosink", "my_audio_sink")
+        print("my audio sink: " + str(self.my_audio_sink))
+        self.player.set_property("video-sink", self.my_audio_sink)
         bus = self.player.get_bus()
         bus.add_signal_watch()
         bus.enable_sync_message_emission()
@@ -310,13 +315,18 @@ class myVLCWindow(Gtk.ApplicationWindow):
                 self.player.set_state(Gst.State.PLAYING)
                 widget.set_stock_id(Gtk.STOCK_MEDIA_PAUSE)
                 # 打印一些媒体信息，用于调试
-                print(str(self.player.get_property("n-text"))+"inner subtitles")
-                print(self.player.get_property("current-suburi"))
+
                 self.player.set_property("flags", 0x00000613)
         elif self.play_toggle == "playing":
             self.player.set_state(Gst.State.PLAYING)
             self.play_toggle = "pause"
             widget.set_stock_id(Gtk.STOCK_MEDIA_PAUSE)
+            print(str(self.player.get_property("n-text"))+"inner subtitles")
+            print(self.player.get_property("current-suburi"))
+            print(self.player.get_property("current-text"))
+            print(self.player.get_property("text-sink"))
+            print(self.player.get_property("audio-sink"))
+            print(self.player.get_property("video-sink"))
         else:
             self.player.set_state(Gst.State.PAUSED)
             self.play_toggle = "playing"
@@ -381,6 +391,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         if widget.get_active():
             state = "on"
             self.player.seek(self.playspeed / 100, Gst.Format.TIME, Gst.SeekFlags.FLUSH, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+
         else:
             state = "off"
             self.player.seek(1.0, Gst.Format.TIME, Gst.SeekFlags.SKIP, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
@@ -410,7 +421,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         dialog.destroy()
         print(self.sub_uri)
-        self.player.set_property("current-suburi", self.sub_uri)
+        self.player.set_property("suburi", self.sub_uri)
 
 Gdk.threads_init()
 window = myVLCWindow()
