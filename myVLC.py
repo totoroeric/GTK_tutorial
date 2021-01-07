@@ -166,12 +166,93 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         # 以下定义播放器
         Gst.init(None)  
-        self.player = Gst.ElementFactory.make("playbin", "player")
-        print("original audio sink:" + str(self.player.get_property("audio-sink")))
-        # 自定义audio sink，使用scaletempo使变速时声音不变调
-        self.my_audio_sink = Gst.ElementFactory.make("scaletempo ! audioconvert ! audioresample ! autoaudiosink", "my_audio_sink")
-        print("my audio sink: " + str(self.my_audio_sink))
-        self.player.set_property("video-sink", self.my_audio_sink)
+        # self.player = Gst.ElementFactory.make("playbin", "player")
+
+
+        # # 定义变速后需要用到的audio调整的elements
+        # self.aplayer = Gst.Pipeline.new("aplayer")
+        # ascale = Gst.ElementFactory.make("scaletempo", "ascacle")
+        # aconv = Gst.ElementFactory.make("audioconvert", "aconv")
+        # aresample = Gst.ElementFactory.make("audioresample", "aresample")
+        # asink = Gst.ElementFactory.make("autoaudiosink", "asink")
+
+        # self.aplayer.add(ascale) 
+        # self.aplayer.add(aconv) 
+        # self.aplayer.add(aresample)
+        # self.aplayer.add(asink)
+
+        # ascale.link(aconv)
+        # aconv.link(aresample)
+        # aresample.link(asink)
+
+        
+        # pad = ascale.get_static_pad("sink")
+        # ghostpad = Gst.GhostPad.new("sink", pad)
+        # self.aplayer.add_pad(ghostpad)
+
+        # self.player.set_property("audio-sink", self.aplayer)
+
+        # 以下测试自建playerbin
+        self.player = Gst.Pipeline.new("player")
+        source = Gst.ElementFactory.make("filesrc", "file-source")
+
+        demuxer = Gst.ElementFactory.make("decodebin", "demuxer")
+        demuxer.connect("pad-added", self.demuxer_callback)
+
+        self.queuev = Gst.ElementFactory.make("queue", "queuev")
+ 
+
+
+        vconv = Gst.ElementFactory.make("videoconvert", "vconv")
+        vrate = Gst.ElementFactory.make("videorate", "vrate")
+        vsink = Gst.ElementFactory.make("autovideosink", "video-output")
+
+        self.queuea = Gst.ElementFactory.make("queue", "queuea")
+
+        aconv1 = Gst.ElementFactory.make("audioconvert", "aconv1")
+        aresample1 = Gst.ElementFactory.make("audioresample", "aresample1")
+        ascale = Gst.ElementFactory.make("scaletempo", "ascacle")
+        aconv2 = Gst.ElementFactory.make("audioconvert", "aconv2")
+        aresample2 = Gst.ElementFactory.make("audioresample", "aresample2")
+        asink = Gst.ElementFactory.make("autoaudiosink", "audio-output")
+
+
+
+        self.player.add(source) 
+        self.player.add(demuxer) 
+
+        self.player.add(self.queuev) 
+        self.player.add(vconv) 
+        self.player.add(vrate)
+        self.player.add(vsink)
+
+        self.player.add(self.queuea) 
+        self.player.add(aconv1) 
+        self.player.add(aresample1)
+        self.player.add(ascale) 
+        self.player.add(aconv2) 
+        self.player.add(aresample2)
+        self.player.add(asink) 
+
+
+        source.link(demuxer)
+
+        self.queuev.link(vconv)
+        vconv.link(vrate)
+        vrate.link(vsink)
+
+        self.queuea.link(aconv1)
+        aconv1.link(aresample1)
+        aresample1.link(ascale)
+        ascale.link(aconv2)
+        aconv2.link(aresample2)
+        aresample2.link(asink)
+
+
+
+
+
+
         bus = self.player.get_bus()
         bus.add_signal_watch()
         bus.enable_sync_message_emission()
@@ -311,7 +392,9 @@ class myVLCWindow(Gtk.ApplicationWindow):
             if os.path.isfile(filepath):
                 filepath = os.path.realpath(filepath)
                 self.play_toggle = "pause"
-                self.player.set_property("uri", "file://" + filepath)
+                # self.player.set_property("uri", "file://" + filepath)
+                self.player.get_by_name("file-source").set_property("location", filepath)
+
                 self.player.set_state(Gst.State.PLAYING)
                 widget.set_stock_id(Gtk.STOCK_MEDIA_PAUSE)
                 # 打印一些媒体信息，用于调试
@@ -390,11 +473,26 @@ class myVLCWindow(Gtk.ApplicationWindow):
     def on_speed_toggled(self, widget, name):
         if widget.get_active():
             state = "on"
+            self.player.set_state(Gst.State.PAUSED)
+
+
             self.player.seek(self.playspeed / 100, Gst.Format.TIME, Gst.SeekFlags.FLUSH, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+            self.player.set_state(Gst.State.PLAYING)
 
         else:
             state = "off"
-            self.player.seek(1.0, Gst.Format.TIME, Gst.SeekFlags.SKIP, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+            # self.player.set_property("audio-sink", Null)
+
+            # self.player.seek(1.0, Gst.Format.TIME, Gst.SeekFlags.SKIP, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+            # self.player.set_state(Gst.State.PAUSED)
+
+            rc, pos_int = self.player.query_position(Gst.Format.TIME)
+            seek_ns = pos_int
+
+            self.player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, seek_ns)
+            
+            # self.player.set_state(Gst.State.PLAYING)
+
         print("Button", name, "was turned", state)
 
     def on_pick_sub_file(self, widget):
@@ -422,6 +520,23 @@ class myVLCWindow(Gtk.ApplicationWindow):
         dialog.destroy()
         print(self.sub_uri)
         self.player.set_property("suburi", self.sub_uri)
+
+    def demuxer_callback(self, demuxer, pad):
+        # if pad.get_property("template").name_template == "video_%02d":
+        #     qv_pad = self.queuev.get_pad("sink")
+        #     pad.link(qv_pad)
+        # elif pad.get_property("template").name_template == "audio_%02d":
+        #     qa_pad = self.queuea.get_pad("sink")
+        #     pad.link(qa_pad)
+
+        string = pad.query_caps(None).to_string()
+        print('Found stream: %s' % string)
+        if string.startswith('video/x-raw'):
+            # qv_pad = self.queuev.get_pad("sink")
+            pad.link(self.queuev.get_static_pad('sink'))
+        elif string.startswith('audio/x-raw'):
+            # qv_pad = self.queuev.get_pad("sink")
+            pad.link(self.queuea.get_static_pad('sink'))
 
 Gdk.threads_init()
 window = myVLCWindow()
