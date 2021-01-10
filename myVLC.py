@@ -75,7 +75,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.playspeed = 100 
         self.sub_uri = ""
 
-        self.set_default_size(800, 400)
+        self.set_default_size(1400, 600)
         self.connect("destroy", Gtk.main_quit, "WM destroy")
 
         action_group = Gtk.ActionGroup(name="my_actions")
@@ -115,18 +115,29 @@ class myVLCWindow(Gtk.ApplicationWindow):
         timelinegrid.attach_next_to(self.scale, self.time_label_left, Gtk.PositionType.RIGHT, 8, 1)
         timelinegrid.attach_next_to(self.time_label_right, self.scale, Gtk.PositionType.RIGHT, 1, 1)
 
+        # 视频和字幕内容窗口的容器box
+        content_box = Gtk.HBox()
+
         # 视频窗口的容器box
         eventbox = Gtk.EventBox()
-        # vbox = Gtk.VBox()
+        # 定义播放视频的窗口区域
+        self.movie_window = Gtk.DrawingArea() # 视频窗口
+        eventbox.add(self.movie_window)
         eventbox.connect("button-press-event", self.on_button_press_event)
+
+        # 字幕容器box
+        subbox = Gtk.VBox()
+        sub_label = Gtk.Label(label="test srt content")
+        subbox.add(sub_label)
+
+        content_box.add(eventbox)
+        content_box.add(subbox)
 
         # 外围的总box
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.pack_start(menubar, False, False, 0)
-        box.pack_start(eventbox, True, True, 0)
-        # 定义播放视频的窗口区域
-        self.movie_window = Gtk.DrawingArea() # 视频窗口
-        eventbox.add(self.movie_window)
+        box.pack_start(content_box, True, True, 0)
+
         box.pack_start(timelinegrid, False, False, 0)
 
         # 把toolbar和其他一些button放在一行的box
@@ -216,6 +227,10 @@ class myVLCWindow(Gtk.ApplicationWindow):
         aresample2 = Gst.ElementFactory.make("audioresample", "aresample2")
         asink = Gst.ElementFactory.make("autoaudiosink", "audio-output")
 
+        self.queues = Gst.ElementFactory.make("queue", "queues")
+        
+        overlay = Gst.ElementFactory.make("subtitleoverlay", "overlay")
+
 
 
         self.player.add(source) 
@@ -223,7 +238,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         self.player.add(self.queuev) 
         self.player.add(vconv) 
-        self.player.add(vrate)
+        # self.player.add(vrate)
         self.player.add(vsink)
 
         self.player.add(self.queuea) 
@@ -234,12 +249,16 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.player.add(aresample2)
         self.player.add(asink) 
 
+        self.player.add(self.queues)
+        self.player.add(overlay)
+
 
         source.link(demuxer)
 
-        self.queuev.link(vconv)
-        vconv.link(vrate)
-        vrate.link(vsink)
+        self.queuev.get_static_pad("src").link(overlay.get_static_pad("video_sink"))
+        overlay.link(vconv)
+        # vconv.link(vrate)
+        vconv.link(vsink)
 
         self.queuea.link(aconv1)
         aconv1.link(aresample1)
@@ -247,6 +266,8 @@ class myVLCWindow(Gtk.ApplicationWindow):
         ascale.link(aconv2)
         aconv2.link(aresample2)
         aresample2.link(asink)
+
+        self.queues.get_static_pad("src").link(overlay.get_static_pad("subtitle_sink"))
 
 
 
@@ -399,7 +420,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
                 widget.set_stock_id(Gtk.STOCK_MEDIA_PAUSE)
                 # 打印一些媒体信息，用于调试
 
-                self.player.set_property("flags", 0x00000613)
+                # self.player.set_property("flags", 0x00000613)
         elif self.play_toggle == "playing":
             self.player.set_state(Gst.State.PLAYING)
             self.play_toggle = "pause"
@@ -473,10 +494,14 @@ class myVLCWindow(Gtk.ApplicationWindow):
     def on_speed_toggled(self, widget, name):
         if widget.get_active():
             state = "on"
-            self.player.set_state(Gst.State.PAUSED)
+            # self.player.set_state(Gst.State.PAUSED)
+            rc, pos_int = self.player.query_position(Gst.Format.TIME)
+            seek_ns = pos_int + self.stepsize * 1000000000
 
 
-            self.player.seek(self.playspeed / 100, Gst.Format.TIME, Gst.SeekFlags.FLUSH, Gst.SeekType.NONE, 0,Gst.SeekType.NONE, 0)
+            self.player.seek(self.playspeed / 100, Gst.Format.TIME, Gst.SeekFlags.FLUSH, Gst.SeekType.SET, pos_int,Gst.SeekType.NONE, 0)
+            # self.player.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH, seek_ns)
+
             self.player.set_state(Gst.State.PLAYING)
 
         else:
@@ -537,6 +562,9 @@ class myVLCWindow(Gtk.ApplicationWindow):
         elif string.startswith('audio/x-raw'):
             # qv_pad = self.queuev.get_pad("sink")
             pad.link(self.queuea.get_static_pad('sink'))
+        elif string.startswith('text/x-raw'):
+            pad.link(self.queues.get_static_pad('sink'))
+
 
 Gdk.threads_init()
 window = myVLCWindow()

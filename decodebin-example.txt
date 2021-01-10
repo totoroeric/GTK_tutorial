@@ -27,3 +27,7 @@ decoder.connect("pad-added", decodebin_pad_added)
 AttributeError: 'GstQueue' object has no attribute 'get_pad'
 Found stream: audio/x-raw, format=(string)F32LE, layout=(string)interleaved, rate=(int)[ 4000, 96000 ], channels=(int)[ 1, 6 ]
 Found stream: text/x-raw, format=(string)pango-markup
+
+
+ gst-launch-1.0 -v filesrc location=test.mkv ! matroskademux name=demux ! video/x-h264 ! queue ! decodebin ! subtitleoverlay name=overlay ! videoconvert ! autovideosink  demux. ! subpicture/x-dvd ! queue ! overlay.
+
