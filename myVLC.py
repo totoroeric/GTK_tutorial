@@ -4,6 +4,8 @@ gi.require_version('Gst', '1.0')
 gi.require_version("Gtk", "3.0")
 gi.require_version('GstVideo', '1.0')
 from gi.repository import Gtk, Gdk, GObject, Gst
+from srt import parse
+
 
 # Needed for window.get_xid(), xvimagesink.set_window_handle(), respectively:
 from gi.repository import GdkX11, GstVideo
@@ -74,6 +76,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.stepsize = 5 # 前后跳转步长（秒）
         self.playspeed = 100 
         self.sub_uri = ""
+        self.sub_list = []
 
         self.set_default_size(1400, 600)
         self.connect("destroy", Gtk.main_quit, "WM destroy")
@@ -116,7 +119,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
         timelinegrid.attach_next_to(self.time_label_right, self.scale, Gtk.PositionType.RIGHT, 1, 1)
 
         # 视频和字幕内容窗口的容器box
-        content_box = Gtk.HBox()
+        self.content_box = Gtk.HBox()
 
         # 视频窗口的容器box
         eventbox = Gtk.EventBox()
@@ -126,17 +129,28 @@ class myVLCWindow(Gtk.ApplicationWindow):
         eventbox.connect("button-press-event", self.on_button_press_event)
 
         # 字幕容器box
-        subbox = Gtk.VBox()
-        sub_label = Gtk.Label(label="test srt content")
-        subbox.add(sub_label)
+        self.subbox = Gtk.Grid()
+        self.subbox.set_column_homogeneous(True)
+        self.subbox.set_row_homogeneous(True)
+        self.scrollable_treelist = Gtk.ScrolledWindow()
+        self.scrollable_treelist.set_vexpand(True)
+        self.subbox.attach(self.scrollable_treelist, 0, 0, 8, 10)
 
-        content_box.add(eventbox)
-        content_box.add(subbox)
+
+        self.content_box.add(eventbox)
+        self.content_box.add(self.subbox)
+
+
+        
+
+
+
+
 
         # 外围的总box
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.pack_start(menubar, False, False, 0)
-        box.pack_start(content_box, True, True, 0)
+        box.pack_start(self.content_box, True, True, 0)
 
         box.pack_start(timelinegrid, False, False, 0)
 
@@ -212,8 +226,6 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         self.queuev = Gst.ElementFactory.make("queue", "queuev")
  
-
-
         vconv = Gst.ElementFactory.make("videoconvert", "vconv")
         vrate = Gst.ElementFactory.make("videorate", "vrate")
         vsink = Gst.ElementFactory.make("autovideosink", "video-output")
@@ -230,8 +242,6 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.queues = Gst.ElementFactory.make("queue", "queues")
         
         overlay = Gst.ElementFactory.make("subtitleoverlay", "overlay")
-
-
 
         self.player.add(source) 
         self.player.add(demuxer) 
@@ -252,7 +262,6 @@ class myVLCWindow(Gtk.ApplicationWindow):
         self.player.add(self.queues)
         self.player.add(overlay)
 
-
         source.link(demuxer)
 
         self.queuev.get_static_pad("src").link(overlay.get_static_pad("video_sink"))
@@ -268,11 +277,6 @@ class myVLCWindow(Gtk.ApplicationWindow):
         aresample2.link(asink)
 
         self.queues.get_static_pad("src").link(overlay.get_static_pad("subtitle_sink"))
-
-
-
-
-
 
         bus = self.player.get_bus()
         bus.add_signal_watch()
@@ -376,7 +380,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
             Gtk.ResponseType.OK,
         )
 
-        self.add_filters(dialog)
+        # self.add_filters(dialog)
 
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
@@ -531,7 +535,7 @@ class myVLCWindow(Gtk.ApplicationWindow):
             Gtk.ResponseType.OK,
         )
 
-        self.add_filters(dialog)
+        # self.add_filters(dialog)
 
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
@@ -544,7 +548,50 @@ class myVLCWindow(Gtk.ApplicationWindow):
 
         dialog.destroy()
         print(self.sub_uri)
-        self.player.set_property("suburi", self.sub_uri)
+        self.sub_list = []
+        filepath = self.sub_uri.strip()
+        if os.path.isfile(filepath):
+            filepath = os.path.realpath(filepath)
+            with open(filepath) as f:
+                read_data = f.read()
+                subs = parse(read_data)
+                for sub in subs:
+                    self.sub_list.append((sub.index, str(sub.start), str(sub.end), sub.content))
+        # print(self.sub_list)
+
+        # self.player.set_property("suburi", self.sub_uri)
+
+        # 这里的内容应该放入单独的method中
+        if len(self.sub_list) > 0:
+            self.sub_liststore = Gtk.ListStore(int, str, str, str)
+            for sub_ref in self.sub_list:
+                self.sub_liststore.append(list(sub_ref))
+
+            self.subview = Gtk.TreeView(model=self.sub_liststore)
+            for i, column_title in enumerate(
+                ["index", "start", "end", "content"]
+            ):
+                renderer = Gtk.CellRendererText()
+                column = Gtk.TreeViewColumn(column_title, renderer, text=i)
+                self.subview.append_column(column)
+
+            select = self.subview.get_selection()
+            select.connect("changed", self.on_tree_selection_changed)
+        
+            # setting up the layout, putting the treeview in a scrollwindow, and the buttons in a row
+           
+            self.scrollable_treelist.add(self.subview)
+            print(self.subview)
+            print(self.scrollable_treelist)
+            self.subview.show_all()
+
+
+    def on_tree_selection_changed(self, selection):
+        model, treeiter = selection.get_selected()
+        if treeiter is not None:
+            print("You selected", model[treeiter][0], "sentence")
+            print("Start from", model[treeiter][1], ", End at", model[treeiter][2])
+            print("The content is", model[treeiter][3])
 
     def demuxer_callback(self, demuxer, pad):
         # if pad.get_property("template").name_template == "video_%02d":

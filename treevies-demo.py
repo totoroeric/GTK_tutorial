@@ -58,13 +58,21 @@ class TreeViewFilterWindow(Gtk.Window):
         self.language_filter.set_visible_func(self.language_filter_func)
 
         # creating the treeview, making it use the filter as a model, and adding the columns
-        self.treeview = Gtk.TreeView(model=self.language_filter)
+        self.treeview = Gtk.TreeView(model=self.software_liststore)
         for i, column_title in enumerate(
             ["index", "start", "end", "content"]
         ):
             renderer = Gtk.CellRendererText()
             column = Gtk.TreeViewColumn(column_title, renderer, text=i)
+            # column.set_sort_column_id(0)
+
+
             self.treeview.append_column(column)
+
+        select = self.treeview.get_selection()
+        select.connect("changed", self.on_tree_selection_changed)
+
+
 
         # creating buttons to filter by programming language, and setting up their events
         self.buttons = list()
@@ -77,13 +85,13 @@ class TreeViewFilterWindow(Gtk.Window):
         self.scrollable_treelist = Gtk.ScrolledWindow()
         self.scrollable_treelist.set_vexpand(True)
         self.grid.attach(self.scrollable_treelist, 0, 0, 8, 10)
-        self.grid.attach_next_to(
-            self.buttons[0], self.scrollable_treelist, Gtk.PositionType.BOTTOM, 1, 1
-        )
-        for i, button in enumerate(self.buttons[1:]):
-            self.grid.attach_next_to(
-                button, self.buttons[i], Gtk.PositionType.RIGHT, 1, 1
-            )
+        # self.grid.attach_next_to(
+        #     self.buttons[0], self.scrollable_treelist, Gtk.PositionType.BOTTOM, 1, 1
+        # )
+        # for i, button in enumerate(self.buttons[1:]):
+        #     self.grid.attach_next_to(
+        #         button, self.buttons[i], Gtk.PositionType.RIGHT, 1, 1
+        #     )
         self.scrollable_treelist.add(self.treeview)
 
         self.show_all()
@@ -105,6 +113,13 @@ class TreeViewFilterWindow(Gtk.Window):
         print("%s language selected!" % self.current_filter_language)
         # we update the filter, which updates in turn the view
         self.language_filter.refilter()
+
+    def on_tree_selection_changed(self, selection):
+        model, treeiter = selection.get_selected()
+        if treeiter is not None:
+            print("You selected", model[treeiter][0], "sentence")
+            print("Start from", model[treeiter][1], ", End at", model[treeiter][2])
+            print("The content is", model[treeiter][3])
 
 
 win = TreeViewFilterWindow()
